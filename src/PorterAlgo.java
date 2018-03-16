@@ -370,7 +370,6 @@ public class PorterAlgo {
 
     public String stripAffixes( String str ) {
 
-        str = str.toLowerCase();
         str = Clean(str);
 
         if (( str != "" ) && (str.length() > 2)) {
