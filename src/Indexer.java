@@ -1,21 +1,19 @@
 import com.mongodb.*;
-import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.UpdateOptions;
 import org.bson.Document;
 import org.jsoup.Jsoup;
 import org.jsoup.select.Elements;
-
 import java.io.*;
 import java.util.*;
 import static com.mongodb.client.model.Filters.*;
 
-public class Main {
+public class Indexer {
     static MongoClientURI connectionString = null;
     static MongoClient mongoClient = null;
     static MongoDatabase db = null;
-    static Map<String, Integer> stopWords;
+    public static Map<String, Integer> stopWords;
     static PorterAlgo pa = new PorterAlgo();
     static Map<String, Integer> importance = new HashMap<>();
 
@@ -44,7 +42,6 @@ public class Main {
             if (!importance.containsKey(tmp))
                 importance.put(tmp, val);
         }
-
     }
     public static void readStopWords(){
         stopWords = new HashMap<String, Integer>();
@@ -69,19 +66,10 @@ public class Main {
             System.out.println("file not found");
         }
     }
-
-    public static void main(String[] args) throws IOException {
-        readStopWords();
-        connectionString = new MongoClientURI("mongodb://ghada:ghada@ds247347.mlab.com:47347/search_engine");
-        mongoClient = new MongoClient(connectionString);
-        db = mongoClient.getDatabase(connectionString.getDatabase());
-        MongoCollection words = db.getCollection("tmp");
-        File input = new File("src/input.html");
+    public static Map<String,Double> Index( File input,Map<String, List<Integer>> mp)throws IOException{
         org.jsoup.nodes.Document htmlDocument = Jsoup.parse(input, "UTF-8", "");
         String body = htmlDocument.body().text();
         String title = htmlDocument.title();
-        Map<String, List<Integer>> mp = new HashMap<>();
-        Integer curId = 0; //(Integer) myDoc.get("id");
         String tmp = "";
         title = title.toLowerCase();
         for (int i = 0; i < title.length(); ++i) {
@@ -100,6 +88,7 @@ public class Main {
                     importance.put(tmp, 8);
                 tmp = "";
             } else tmp += c;
+
         }
         if (!tmp.equals("")) {
             addWordsToMap(mp, tmp, title.length());
@@ -138,6 +127,7 @@ public class Main {
                     c == '&' || c == '@' || c == ' ' || c == '.') {
                 if (tmp.equals("") || isStopWord(tmp)) {tmp="";continue;}
                 //tmp = tmp.toLowerCase();
+                
                 addWordsToMap(mp, tmp, i + title.length() + 1);
                 if (!importance.containsKey(tmp))
                     importance.put(tmp, 1);
@@ -147,7 +137,17 @@ public class Main {
         if (!tmp.equals(""))
             addWordsToMap(mp, tmp, cont.length() + title.length() + 1);
         // add words indices to DB
-        Map<String, Double> tf = calculateTf(mp);
+         return calculateTf(mp);
+    }
+    public static void main(String[] args) throws IOException {
+        readStopWords();
+       // connectionString = new MongoClientURI("mongodb://ghada:ghada@ds247347.mlab.com:47347/search_engine");
+        mongoClient = new MongoClient("localhost",27017);
+        db = mongoClient.getDatabase("searchEngine");
+        File input = new File("ghadaold.html");
+        Integer curId = 0; //(Integer) myDoc.get("id");
+        Map<String, List<Integer>> mp =new HashMap<>();
+        Map<String, Double> tf =  Index(input,mp);
         addWordsToDB(mp, curId, tf);
     }
 
@@ -167,8 +167,12 @@ public class Main {
         for (Map.Entry<String, List<Integer>> entry : mp.entrySet())
             dom +=entry.getValue().size()*entry.getValue().size();
         dom=Math.sqrt(dom);
-        for (Map.Entry<String, List<Integer>> entry : mp.entrySet())
-            ret.put(entry.getKey(),(entry.getValue().size()/dom)*importance.get(entry.getKey()));
+        for (Map.Entry<String, List<Integer>> entry : mp.entrySet()) {
+            Integer num=1;
+            if (importance.get(entry.getKey()) !=null)
+                num=importance.get(entry.getKey());
+            ret.put(entry.getKey(), (entry.getValue().size() / dom) * num);
+        }
         return ret;
     }
     public static void addWordsToDB(Map<String, List<Integer>> mp, Integer docID,Map<String, Double> tf){
@@ -176,31 +180,20 @@ public class Main {
         Iterator it = mp.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry pair = (Map.Entry)it.next();
-            if (pair.getKey().toString().length()<2){it.remove();  continue;}
-            String colName = pair.getKey().toString().substring(0,2);
-            col = db.getCollection("ghada");
+            if (pair.getKey().toString().length()<1){it.remove();  continue;}
+            String str=pair.getKey().toString();
+            String colName = str.substring(0,Math.min(str.length(),2));
+            col = db.getCollection(colName);
             List<Integer> ls= (List<Integer>) pair.getValue();
-            BasicDBObject match = new BasicDBObject("words.name",pair.getKey().toString());
-            BasicDBObject pushID = new BasicDBObject("$push",new BasicDBObject("words.$.docNum",docID));
-            BasicDBObject pushIdx = new BasicDBObject("$push",new BasicDBObject("words.$.idx",ls));
-            BasicDBObject pushTf = new BasicDBObject("$push",new BasicDBObject("words.$.tf",tf.get(pair.getKey())));
-            Boolean fnd=true;
-            try {
-                col.updateOne(match, pushID,new UpdateOptions().upsert(true));
-            }
-            catch (MongoWriteException e){
-                Document doc = new Document("name", pair.getKey().toString()).append("docNum", Arrays.asList(docID)).append("idx",Arrays.asList(ls)).append("tf",Arrays.asList(tf.get(pair.getKey())));
-                col.updateOne(eq(new BasicDBObject("stemmed",pa.stripAffixes(pair.getKey().toString()))),new BasicDBObject("$push",new BasicDBObject("words",doc)),new UpdateOptions().upsert(true));
-                //System.out.println(e.getError());
-                fnd=false;
-            }
-            if (fnd) {
-                col.updateOne(match, pushIdx, new UpdateOptions().upsert(true));
-                col.updateOne(match, pushTf, new UpdateOptions().upsert(true));
-            }
+            BasicDBObject mtch1 = new BasicDBObject("word",pair.getKey().toString());
+            BasicDBObject mtch2 = new BasicDBObject("stemmed",pa.stripAffixes(pair.getKey().toString()));
+            Document doc = new Document("docNum", docID).append("idx",ls).append("tf",tf.get(pair.getKey()));
+            BasicDBObject pushID = new BasicDBObject("$push",new BasicDBObject("doc",doc));
+            col.updateOne(and(mtch1,mtch2), pushID,new UpdateOptions().upsert(true));
             it.remove(); // avoids a ConcurrentModificationException
         }
 
     }
+
 
 }
