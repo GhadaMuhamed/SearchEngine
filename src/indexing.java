@@ -1,50 +1,18 @@
-import com.mongodb.MongoClient;
-import com.mongodb.MongoClientURI;
-import com.mongodb.client.MongoDatabase;
 import org.jsoup.Jsoup;
 import org.jsoup.select.Elements;
-
 import java.io.*;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class indexing {
-    static MongoClient mongoClient = null;
-    static MongoDatabase db = null;
-    public static Map<String, Integer> stopWords;
-    static Map<String, Integer> importance = new HashMap<>();
+
+    Map<String, Integer> stopWords;
+    public indexing( Map<String, Integer> mapStopWords){
+        stopWords=mapStopWords;
+    }
+    Map<String, Integer> importance = new HashMap<>();
     static PorterAlgo pa = new PorterAlgo();
 
-    public static void connectDB(){
-        mongoClient = new MongoClient("localhost",27017);
-        db = mongoClient.getDatabase("searchEngine");
-    }
-    public void readStopWords(){
-        stopWords = new HashMap<String, Integer>();
-        File file=new File("stopWords.txt");
-        FileReader fileReader;
-        try{ fileReader=new FileReader(file);
-            BufferedReader br = new BufferedReader(fileReader);
-            String stopWord;
-            try {
-                stopWord = br.readLine();
-                while (stopWord != null) {
-                    stopWords.put(stopWord,1);
-                    stopWord = br.readLine();
-                }
-            }
-            catch(IOException e){}
-            try{ fileReader.close();}
-            catch (IOException e){
-            }
-        }
-        catch (FileNotFoundException x){
-            System.out.println("file not found");
-        }
-    }
-    public static void addHeader(int val, String s) {
+    public void addHeader(int val, String s) {
         String tmp = "";
         s=s.toLowerCase();
         for (int i = 0; i < s.length(); ++i) {
@@ -58,22 +26,20 @@ public class indexing {
                     continue;
                 }
 
-                // addWordsToMap(mp, tmp, i);
                 if (!importance.containsKey(tmp))
                     importance.put(tmp, val);
                 tmp = "";
             } else tmp += c;
         }
         if (!tmp.equals("")) {
-            //addWordsToMap(mp, tmp, title.length());
             if (!importance.containsKey(tmp))
                 importance.put(tmp, val);
         }
     }
-    public static Boolean isStopWord(String s){
+    public  Boolean isStopWord(String s){
         return stopWords.containsKey(s);
     }
-    public static Map<String,Double> calculateTf(Map<String, List<Integer>> mp){
+    public  Map<String,Double> calculateTf(Map<String, List<Integer>> mp){
         Double dom = 0.0;
         Map <String,Double> ret = new HashMap<>();
         for (Map.Entry<String, List<Integer>> entry : mp.entrySet())
@@ -88,7 +54,7 @@ public class indexing {
         return ret;
     }
 
-    public static Map<String,Double> Index( File input,Map<String, List<Integer>> mp)throws IOException{
+    public  Map<String,Double> Index( File input,Map<String, List<Integer>> mp)throws IOException{
         org.jsoup.nodes.Document htmlDocument = Jsoup.parse(input, "UTF-8", "");
         String body = htmlDocument.body().text();
         String title = htmlDocument.title();
@@ -104,7 +70,6 @@ public class indexing {
                     tmp = "";
                     continue;
                 }
-                //tmp = tmp.toLowerCase();
                 addWordsToMap(mp, tmp, i);
                 if (!importance.containsKey(tmp))
                     importance.put(tmp, 8);
