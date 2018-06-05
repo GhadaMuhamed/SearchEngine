@@ -1,4 +1,5 @@
 a
+am
 about
 above
 across
@@ -23,6 +24,7 @@ anyone
 anything
 anywhere
 are
+aren't
 area
 areas
 around
@@ -70,10 +72,13 @@ come
 could
 d
 did
+didn't
 differ
 different
 differently
 do
+don't
+doesn't
 does
 done
 down
@@ -143,6 +148,9 @@ groups
 h
 had
 has
+hasn't
+hadn't
+haven't
 have
 having
 he
@@ -160,6 +168,7 @@ his
 how
 however
 i
+i'm
 if
 important
 in
@@ -169,6 +178,7 @@ interesting
 interests
 into
 is
+isn't
 it
 its
 itself
